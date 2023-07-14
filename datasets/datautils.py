@@ -5,16 +5,11 @@
 # @Email   : Guofeng.Mei@student.uts.edu.au
 # @File    : datautils.py
 # @Software: PyCharm
-import glob
-import os
-import re
+import glob, os, re
+import h5py, torch, numpy as np
 from os import listdir
 from os.path import join, isfile, splitext, isdir
 from typing import List
-
-import h5py
-import numpy as np
-import torch
 from scipy.spatial import cKDTree
 from scipy.spatial.transform import Rotation
 from sklearn.neighbors import NearestNeighbors
@@ -147,7 +142,9 @@ def load_data(partition, root):
     data_dir = os.path.join(root, '')
     all_data = []
     all_label = []
-    for h5_name in glob.glob(os.path.join(data_dir, 'modelnet40_ply_hdf5_2048', 'ply_data_%s*.h5' % partition)):
+    for h5_name in glob.glob(os.path.join(
+    os.path.expanduser(data_dir), 
+    'modelnet40_ply_hdf5_2048', f'ply_data_{partition}*.h5')):
         f = h5py.File(h5_name)
         data = np.concatenate([f['data'][:], f['normal'][:]], axis=-1).astype('float32')
         label = f['label'][:].astype('int64')

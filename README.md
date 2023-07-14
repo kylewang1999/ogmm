@@ -32,3 +32,10 @@ Our model is trained with the following environment:
 * scipy
 * open3d
 * tensorboard
+
+#### Build the env using conda
+```
+conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia
+conda install -c conda-forge coloredlogs tqdm easydict gitpython nibabel tensorboard transforms3d plyfile
+conda install -c anaconda h5py
+```

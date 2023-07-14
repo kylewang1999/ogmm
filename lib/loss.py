@@ -73,6 +73,7 @@ class KMLoss(nn.Module):
 
 
 class CluLoss(nn.Module):
+    ''' Clustering Loss '''
     def __init__(self, tau=0.5):
         super().__init__()
         self.loss = ConLoss(tau)

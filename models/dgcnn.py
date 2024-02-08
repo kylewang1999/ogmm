@@ -45,6 +45,11 @@ class GMMSVD(nn.Module):
         self.epsilon = epsilon
 
     def forward(self, src, tgt, src_desc, tgt_desc, src_log_gamma=None, tgt_log_gamma=None, src_o=None, tgt_o=None):
+        ''' Weighted SVD solution to GMM registration. 
+        Note: See Deep GMR: https://github.com/wentaoyuan/deepgmr
+        
+        '''
+
         src_gamma = F.softmax(src_log_gamma, dim=1)  # [b,k,n]
         tgt_gamma = F.softmax(tgt_log_gamma, dim=1)
         src_pi, src_mu, src_desc_mu = og_params(

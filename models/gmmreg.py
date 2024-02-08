@@ -33,6 +33,18 @@ class GMMReg(nn.Module):
         self.cluloss = CluLoss(tau=0.1)
 
     def forward(self, src, tgt, is_test=False):
+        '''
+        Explaination:
+            - src: [B, 3, N], input source point cloud
+                - src_feats: [B, 520, N], source point cloud features
+                - src_feats_anchor
+                - src_feats_pos
+                - src_gamma
+                - src_pi
+                - src_xyz_mu
+            - tgt: [B, 3, M], inputs target point cloud
+                - tgt_feats: [B, 520, N], target point cloud features
+        '''
         batch_size, _, _ = src.size()
         # rot = torch.eye(3, device=src_mu.device, dtype=torch.float32).view(1, 3, 3).repeat(batch_size, 1, 1)
         # trans = torch.zeros(batch_size, 3, 1, device=src_mu.device, dtype=torch.float32)
@@ -80,10 +92,18 @@ class GMMReg(nn.Module):
         src_o = torch.sigmoid(src_o).view(batch_size, -1)
         tgt_o = torch.sigmoid(tgt_o).view(batch_size, -1)
 
-        src_log_scores = self.cluster(src_feats)
+        src_log_scores = self.cluster(src_feats)    # Gammas
         tgt_log_scores = self.cluster(tgt_feats)
         rot, trans, soft_corr_mu, soft_mu_scores = self.soft_svd(
-            src, tgt, src_feats, tgt_feats, src_log_scores, tgt_log_scores, src_o, tgt_o)
+            src,            # [B,C,N]
+            tgt,            # [B,C,N]
+            src_feats,      # [B,C',N]
+            tgt_feats,      # [B,C',N]
+            src_log_scores, # [B,C''=32,N]
+            tgt_log_scores, # [B,C''=32,N]
+            src_o,          # [B,N]
+            tgt_o           # [B,N]
+        )
         # iv_transf = soft_svd(tgt_mu_xyz, src_mu_xyz, tgt_mu_feats, src_mu_feats)
         # clustering-based loss
         src_clu_loss = self.cluloss(src, src_xyz_mu, src_feats, src_gamma)

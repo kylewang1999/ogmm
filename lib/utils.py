@@ -72,6 +72,18 @@ def log_boltzmann_kernel(cost, u, v, epsilon):
 
 
 def sinkhorn(cost, p=None, q=None, epsilon=1e-2, thresh=1e-2, max_iter=100):
+    ''' Sinkhorn-Knopp algorithm for optimal transport.
+    Call stack: GMMReg.forward() -> get_anchor_corrs() -> wkeans() -> sinkhorn()
+    
+    Input:
+        - cost: Cost matrix.
+        - p: [B,N=717]. Source distribution.
+        - q: [B,J=128]. Target distribution.
+    Output:
+        - gamma: Optimal transport matrix.
+        - loss: Sinkhorn loss.
+    '''
+    
     if p is None or q is None:
         batch_size, num_x, num_y = cost.shape
         device = cost.device
@@ -109,7 +121,7 @@ def sinkhorn(cost, p=None, q=None, epsilon=1e-2, thresh=1e-2, max_iter=100):
 
 
 def index_points(points, idx):
-    """
+    """ Selects a subset of points from a larger set of points based on idx values.
     Input:
         feats: input feats data, [B, N, C]
         idx: sample index data, [B, S]
@@ -118,26 +130,32 @@ def index_points(points, idx):
     """
     device = points.device
     B = points.shape[0]
-    view_shape = list(idx.shape)
-    view_shape[1:] = [1] * (len(view_shape) - 1)
-    repeat_shape = list(idx.shape)
-    repeat_shape[0] = 1
-    batch_indices = torch.arange(B, dtype=torch.long).to(device).view(view_shape).repeat(repeat_shape)
+    view_shape = list(idx.shape)    
+    view_shape[1:] = [1] * (len(view_shape) - 1)    # (B, 1)
+    repeat_shape = list(idx.shape)  
+    repeat_shape[0] = 1 # (1, S)
+    batch_indices = torch.arange(B, dtype=torch.long).to(device).view(view_shape).repeat(repeat_shape)  # (B,S)
     new_points = points[batch_indices, idx, :]
     return new_points
 
 
 def gmm_params(gamma, pts, return_sigma=False):
-    """
-    gamma: B feats N feats J
-    pts: B feats N feats D
+    """ Return GMM parameters (pi, mu, sigma) given cluster assignments and points.
+    Input:
+        - gamma: [B,N,J=128]. Soft cluster assignments (i.e. transportation policy). 
+        J is number of clusters, i.e. number of gaussian components in the GMM. Created by wkeans().
+        - pts:   [B,N,D=3].
+    Output: GMM parameters
+        - pi:    [B,N]
+        - mu:    [B,N,3]
+        - sigma: [B,N,3,3](optional). Covariance matrices 
     """
     # pi: B feats J
     D = pts.size(-1)
-    pi = gamma.mean(dim=1)
-    npi = pi * gamma.shape[1] + 1e-5
+    pi = gamma.mean(dim=1)              # (B,N,J) -> (B,J)
+    npi = pi * gamma.shape[1] + 1e-5    # (B,J)
     # p: B feats J feats D
-    mu = gamma.transpose(1, 2) @ pts / npi.unsqueeze(2)
+    mu = gamma.transpose(1, 2) @ pts / npi.unsqueeze(2)     # (B,J,N) @ (B,N,D) -> (B,J,D)
     if return_sigma:
         # diff: B feats N feats J feats D
         diff = pts.unsqueeze(2) - mu.unsqueeze(1)
@@ -172,6 +190,8 @@ def farthest_point_sample(xyz, npoint, is_center=False):
     Input:
         pts: pointcloud data, [B, N, 3]
         npoint: number of samples
+        is_center: if True, the initial farthest point is selected as the centroid 
+        of the entire point cloud xyz.
     Return:
         sub_xyz: sampled point cloud index, [B, npoint]
     """
@@ -199,13 +219,26 @@ def farthest_point_sample(xyz, npoint, is_center=False):
 
 
 def wkeans(x, num_clusters, dst='feats', iters=10, is_fast=True):
+    ''' Wasserstein Weighted K-means clustering 
+    Inputs:
+        - x: [B,N=717,C=3]. Point cloud.
+        - num_clusters: int (J=128). Number of clusters.       
+        - dst: str. Distance metric. 'feats' for feature space dist or 'eu' for
+        euclidean distance.
+    Important Intermediate Variables:
+        - cost: [B,N,J]. Cost induced by x-to-centroids transportation policy.
+        I.e. squared distance between x and centroids.
+        - gamma: [B,N,J]. Transportation policy from x to cluster centroids.
+        Also can be thought of as soft cluster assignments.
+    Outputs:
+    '''
     bs, num, dim = x.shape
     if is_fast:
         ids = farthest_point_sample(x, num_clusters, is_center=True)
-        centroids = index_points(x, ids)
+        centroids = index_points(x, ids)    # (B,M,C=3)
     else:
         ids = torch.randperm(num)[:num_clusters]
-        centroids = x[:, ids, :]
+        centroids = x[:, ids, :]            # (B,M,C=3)
     gamma, pi = torch.zeros((bs, num, num_clusters), requires_grad=True).to(x), None
     for i in range(iters):
         if dst == 'eu':
@@ -242,19 +275,43 @@ def contrastsk(x, y, p=None, epsilon=1e-3, thresh=1e-3, max_iter=30, dst='eu'):
 
 
 def get_local_corrs(xyz, xyz_mu, feats):
-    dis = square_distance(xyz_mu, xyz)
+    """ Get anchor points in features space. Note that anchor points in euclidean
+    space is points in xyz that are closest to xyz_mu.
+
+    Inputs:
+        - xyz:    [B,N,C=3]       Input point cloud 
+        - xyz_mu: [B,J=128,3]     Anchor points in R^3. I.e. mu from GMM model.
+        - feats:  [B,N,C'=520]    Input point features 
+    
+    Output:
+        - feats_pos: [B,J=128,C'=520] Anchor points in feature space (R^520). 
+    """
+    dis = square_distance(xyz_mu, xyz)  # (B,J,N)
     # c_dims = xyz.size(-1)
-    f_dims = feats.size(-1)
-    idx = torch.topk(dis, k=1, dim=2, largest=False)[1]
-    idx = torch.nan_to_num(idx, nan=0)
+    f_dims = feats.size(-1)                             # C'=520
+    idx = torch.topk(dis, k=1, dim=2, largest=False)[1] # (B,J,1)
+    idx = torch.nan_to_num(idx, nan=0)                  # (B,J,1)
     # xyz_idx = idx.repeat(1, 1, c_dims)
-    feats_idx = idx.repeat(1, 1, f_dims)
     # xyz_anchor = torch.gather(xyz, dim=1, index=xyz_idx)
+    feats_idx = idx.repeat(1, 1, f_dims)# (B,J,C'=520)
     feats_pos = torch.gather(feats, dim=1, index=feats_idx)
     return feats_pos
 
 
 def get_anchor_corrs(xyz, feats, num_clusters, dst='eu', iters=10, is_fast=True):
+    '''
+    Inputs:
+        - xyz:          [B,C=3,N=717]    Input point cloud (channels first)
+        - feats:        [B,C'=520,N=717] Additional input features for each point (channels first)
+        - num_clusters: int. (J=128)     Number of clusters/anchor points to generate
+        - dst: 'eu' for Euclidean distance or 'feats' for feature space distance
+    Outputs:
+        - feats_anchor: [B,C',J=128]    Feature space anchor points
+        - feats_pos:    [B,C',J=128]    Feature space cluster centroids
+        - gamma:        [B,N, J=128]    R^3 xyz to centroids transportation policy
+        - pi:           [B,J=128]       GMM param, Gaussian component weights
+        - xyz_mu:       [B,C=3,J=128]   GMM param, centroids (channel first)
+    '''
     gamma, pi, xyz_mu = wkeans(xyz.transpose(-1, -2), num_clusters, dst, iters, is_fast)
     feats_pos = gmm_params(gamma, feats.transpose(-1, -2))[1].transpose(-1, -2)
     feats_anchor = get_local_corrs(xyz.transpose(-1, -2), xyz_mu, feats.transpose(-1, -2)).transpose(-1, -2)

@@ -55,8 +55,8 @@ def data_loader(args):
         val_transforms = torchvision.transforms.Compose(val_transforms)
         train_data = ModelNetHdf(args, args.root, partition='train', unseen=args.unseen, transform=train_transforms)
         val_data = ModelNetHdf(args, args.root, partition='test', unseen=args.unseen, transform=val_transforms)
-        train_loader = DataLoader(train_data, args.batch_size, shuffle=True, drop_last=True, num_workers=8)
-        test_loader = DataLoader(val_data, args.test_batch_size, shuffle=False, drop_last=False, num_workers=8)
+        train_loader = DataLoader(train_data, args.batch_size, shuffle=True, drop_last=True, num_workers=args.num_workers)
+        test_loader = DataLoader(val_data, args.test_batch_size, shuffle=False, drop_last=False, num_workers=args.num_workers)
     else:
         raise Exception("not implemented")
     return train_loader, test_loader

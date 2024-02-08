@@ -5,11 +5,25 @@
 # @Email   : Guofeng.Mei@student.uts.edu.au
 # @File    : o3dutils.py
 # @Software: PyCharm
-import copy
+import torch, copy, numpy as np, open3d as o3d, matplotlib.pyplot as plt
 
-import numpy as np
-import open3d as o3d
-import torch
+
+def plt_pcds(xyzs, fname=None):
+    ''' Plot point clouds in 3D using matplotlib
+    Inputs:
+        - xyzs: list of point clouds, each of shape (N,3). Preferably in the 
+        order of [src, tgt, tgt_raw]
+        - fname: Optional. If provided, save the figure to this path
+    '''
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.set_title('3D Point Cloud for item')
+    ax.set_xlabel('X'); ax.set_ylabel('Y'); ax.set_zlabel('Z')
+    colors = ['red', 'blue', 'grey']
+    for i,xyz in enumerate(xyzs): 
+        ax.scatter(xyz[:, 0], xyz[:, 1], xyz[:, 2], c=colors[i%len(colors)],alpha=0.5, marker='.')
+    plt.show()
+    if fname is not None: plt.savefig(fname); plt.clf()
 
 
 def make_point_cloud(pts, normals=None):

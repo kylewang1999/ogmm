@@ -38,8 +38,8 @@ def train_one_epoch(epoch, model, loader, optimizer, logger, checkpoint_path):
     for step, data in enumerate(tqdm(loader, leave=False)):
         pts1 = data["src_xyz"]
         pts2 = data["tgt_xyz"]
-        src_overlap = data["src_overlap"]
-        tgt_overlap = data["tgt_overlap"]
+        src_overlap = data["src_overlap"]   # {0,1} valued overlap mask
+        tgt_overlap = data["tgt_overlap"]   # essentially the same as src_overlap
         transf_gt = data["transform_gt"]
         if torch.cuda.is_available():
             pts1 = pts1.cuda()

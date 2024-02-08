@@ -332,7 +332,45 @@ def gaussian_corruption(pcd, std=0.03):
     return pcd + noise
 
 
+def apply_transform_batch(pts, rot, trans):
+    ''' Apply SE(3) transformation to a batch of point clouds
+    Input: 
+        - pts       (B,3,N)             Source point cloud.
+        - rot:      (B,3,3)             Rotation matrices
+        - trans:    (B,3,1) or (B,3)    Translation vectors
+    Return:
+        - rot @ trans + trans for each point cloud in batch B.
+    '''
+    assert trans.shape[-1]==3, f'trans should be of shape [B,3], but got {trans.shape}'
+    assert pts.shape[1]==3, f'pts should be of shape [B,3,N], but got {pts.shape}'
+    if trans.shape[-1]==1: trans=trans.squeeze(-1)
+    
+    try:    return torch.einsum('...ij,...jk->...ik', rot, pts).transpose(-1,-2) + trans.unsqueeze(1)
+    except: return np.einsum('...ij,...jk->...ik', rot, pts).transpose(-1,-2) + trans.unsqueeze(1)
+
+
+def apply_transform(pts, rot, trans):
+    ''' Apply SE(3) transformation to point cloud
+    Input:
+        - pts       (N,3)                   Source point cloud.
+        - rot:      (3,3)                   Rotation matrices
+        - trans:    (3,1) or (1,3) or (3)   Translation vectors
+    Return:
+        - (N,3) transformed point cloud
+    '''
+    assert len(pts.shape)==2 and (pts.shape[-1]==3 or pts.shape[0]==3), \
+        f'pts should be of shape [N,3] or [3,N], but got {pts.shape}'
+    assert rot.shape==(3,3), f'rot should be of shape [3,3], but got {rot.shape}'
+    assert len(trans.shape) <=2 and 3 in trans.shape, \
+          f'trans should be of shape [3,1], [1,3] or [3], but got {trans.shape}'
+
+    if pts.shape[0]==3: pts = pts.T
+    if len(trans.shape)==2: trans=trans.squeeze()
+    return (rot @ pts.T).T + trans
+    
+
 ''' --------- Visualization --------- '''
+
 
 def plot_pcd(pcd, title=None, ax_lim=None, path=None): 
     ''' Plot np.array (n,3)
@@ -355,9 +393,7 @@ def plot_pcd(pcd, title=None, ax_lim=None, path=None):
     plt.clf()
 
 def compare_pcd(pcds, title=None, labels=None, path=None):
-    if labels is None: 
-        labels = ['Original', 'Corrupted', 'Recovered']
-
+    if labels is None: labels = ['pts1', 'pts2=r @ pts1 + t', 'pts3']
     dpi = 80
     fig = plt.figure(figsize=(1440/dpi, 720/dpi), dpi=dpi)
     ax = fig.add_subplot(projection='3d')
@@ -369,12 +405,31 @@ def compare_pcd(pcds, title=None, labels=None, path=None):
         ax.scatter(points[:, 0], points[:, 2], points[:, 1],
                 marker='.', alpha=0.5, edgecolors='none', label=label)
 
-    plt.legend()
     if title is not None: plt.title(title)
-    plt.show()
     if path is not None: plt.savefig(f"./imgs/{path}.png")
-    plt.clf()
-        
+    plt.legend(); plt.show(); plt.clf()
+
+def plt_gmm(pts, centroids, title=None, path=None):
+    '''
+    Input:
+        - pts:          (N, 3) np array 
+        - centroids:    (J, 3) np array 
+    '''
+    dpi = 80
+    fig = plt.figure(figsize=(1440/dpi, 720/dpi), dpi=dpi)
+    ax = fig.add_subplot(projection='3d')
+
+    ax.set_xlim3d([-1,1]), ax.set_ylim3d([-1,1]), ax.set_zlim3d([-1,1])
+    ax.set_proj_type('persp')
+
+    ax.scatter(pts[:, 0], pts[:, 2], pts[:, 1], marker='.', alpha=0.5, edgecolors='none', label='pts')
+    ax.scatter(centroids[:, 0], centroids[:, 2], centroids[:, 1], marker='x', alpha=1, edgecolors='none', label='mu')
+
+    if title is not None: plt.title(title)
+    if path is not None: plt.savefig(f"./imgs/{path}.png")
+    plt.legend(); plt.show(); plt.clf()
+
+
 
 def numpy_to_torch(inputs, dtype=torch.float32, to_gpu=True):
     if to_gpu:

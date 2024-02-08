@@ -1,17 +1,10 @@
-import logging, os, torch, numpy as np, torch, torch.nn as nn, torchvision
-from torch.utils.data import DataLoader
-from time import time; from tqdm import tqdm
-from collections import defaultdict
-from lib.loss import dcp_loss, get_weighted_bce_loss
-from lib.metric import rotation_error, translation_error, dcp_metrics, summarize_metrics, save_model, _init_
-from lib.se3 import decompose_trans
+import logging, os, torch, numpy as np, torch, torch.nn as nn
 
 from models.gmmreg import GMMReg
 from train import *
 from configs.cfgs import get_parser
 from datasets.dataloader import data_loader
 from datasets.modelnet import *
-
 
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
@@ -21,8 +14,7 @@ args = get_parser().parse_args([
     '--root', '~/Desktop/data/',
     '--batch_size', '48',
     '--epochs', '50',
-    '--lr', '1e-4',
-    '--exp_name', 'lr_1e-4'
+    '--lr', '5e-5', '--exp_name', 'foo',
 ])
 
 
